@@ -14,6 +14,3 @@ pipelines, internal paths, or licensed datasets.
 - `model/unet_model.py` — compact U-Net (66-channel input, N-class output).
 - `model/dataset_class.py` — memory-mapped patch dataset and independent-test reader.
 - `feature/vegetation_indices_glcm.py` — 7 vegetation indices and GLCM calculater.
-
-> Note: Full preprocessing pipelines and raw imagery are not included due to size and licensing.
-> The provided modules are sufficient to understand and reproduce the methodology.
