@@ -11,6 +11,6 @@ pipelines, internal paths, or licensed datasets.
 - `GEE/download_sentinel2.txt` — code for download sentinel-2 imagery in google earth engine.
 - `dataset/add_image_metadata.py` — build per-image patch metadata aligned with augmentation.
 - `dataset/calculate_forest_area_by_images.py` — compute class-wise area coverage for random subsets.
-- `model/unet_model.py` — compact U-Net (66-channel input, N-class output).
+- `model/unet_model.py` — compact U-Net (66-channel).
 - `model/dataset_class.py` — memory-mapped patch dataset and independent-test reader.
 - `feature/vegetation_indices_glcm.py` — 7 vegetation indices and GLCM calculater.
