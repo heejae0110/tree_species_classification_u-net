@@ -1,0 +1,133 @@
+// === Sentinel-2 Monthly Band Stack (Core, 2022–2024, AOI-based) ===
+
+// ---- 0) Params ----------------------------------------------------
+var AOI_ASSET   = 'projects/name';
+var YEARS       = [2022, 2023, 2024];
+var PERIODS     = [                      
+  {name: 'May',     start: '-05-01', end: '-05-31'},
+  {name: 'September', start: '-09-01', end: '-09-30'},
+  {name: 'November',  start: '-11-01', end: '-11-30'}
+];
+var CLOUD_MAX   = 60;                  
+var EXPORT_FOLDER = 'Sentinel2_Seoul_Stacked';
+var EXPORT_CRS  = 'EPSG:4326';
+var EXPORT_SCALE= 10;          
+
+// Sentinel-2 밴드 순서(8 bands)
+var BAND_ORDER = [
+  'B2','B3','B4',            // 10m
+  'B5','B6','B7','B8A','B11','B12', // 20m
+  'B8',                      // 10m (NIR Broad)
+  'B9'                       // 60m
+];
+// After download all bands, we selected blue (B2), green (B3), and red (B4) bands; the Red Edge band (B5); the near-infrared band (B8); and the shortwave infrared bands of water vapor (B9), SWIR1 (B11), and SWIR2 (B12).
+
+var BAND_INFO = {
+  'B2':'Blue_490nm',
+  'B3':'Green_560nm',
+  'B4':'Red_665nm',
+  'B5':'RedEdge1_705nm',
+  'B6':'RedEdge2_740nm',
+  'B7':'RedEdge3_783nm',
+  'B8':'NIR_Broad_842nm',
+  'B8A':'NIR_Narrow_865nm',
+  'B9':'WaterVapor_945nm',
+  'B11':'SWIR1_1610nm',
+  'B12':'SWIR2_2190nm'
+};
+
+// ---- 1) AOI -------------------------------------------------------
+var aoi = ee.FeatureCollection(AOI_ASSET).geometry();
+
+// ---- 2) Cloud/Shadow mask (QA60 + SCL) ----------------------------
+function maskS2(image) {
+  var qa = image.select('QA60');
+  var cloud = 1 << 10;
+  var cirrus = 1 << 11;
+  var qaMask = qa.bitwiseAnd(cloud).eq(0)
+                 .and(qa.bitwiseAnd(cirrus).eq(0));
+  var scl = image.select('SCL');
+  var sclMask = scl.neq(3)    // cloud shadow
+    .and(scl.neq(8))          // medium cloud
+    .and(scl.neq(9))          // high cloud
+    .and(scl.neq(10))         // thin cirrus
+    .and(scl.neq(11));        // snow/ice
+  return image.updateMask(qaMask.and(sclMask)).divide(10000);
+}
+
+// ---- 3) Resample all bands to 10m, keep order ---------------------
+function to10m(image) {
+  // 작업 후 밴드 순서를 강제
+  var img10 = image
+    .resample('bilinear')
+    .reproject({crs: image.projection(), scale: EXPORT_SCALE})
+    .select(BAND_ORDER);
+  // 밴드명 바꾸기
+  var newNames = BAND_ORDER.map(function(b){ return BAND_INFO[b]; });
+  return img10.rename(newNames);
+}
+
+// ---- 4) Build year-merged collection for each period --------------
+function buildCollection(startStr, endStr) {
+  var col = ee.ImageCollection([]);
+  YEARS.forEach(function(y) {
+    var s = y + startStr;
+    var e = y + endStr;
+    var yearly = ee.ImageCollection('COPERNICUS/S2_SR_HARMONIZED')
+      .filterBounds(aoi)
+      .filterDate(s, e)
+      .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', CLOUD_MAX))
+      .map(maskS2);
+    col = col.merge(yearly);
+  });
+  return col;
+}
+
+// ---- 5) Export helper ---------------------------------------------
+function exportBandStack(img, periodName) {
+  Export.image.toDrive({
+    image: img.clip(aoi),
+    description: 'Seoul_S2_' + periodName + '_2022-2024_BandStack_11Bands',
+    folder: EXPORT_FOLDER,
+    scale: EXPORT_SCALE,
+    region: aoi,
+    maxPixels: 1e9,
+    crs: EXPORT_CRS
+  });
+}
+
+function exportMetadata(col, periodName) {
+  var meta = col.map(function(im){
+    return ee.Feature(null, {
+      image_id: im.get('system:id'),
+      date: ee.Date(im.get('system:time_start')).format('YYYY-MM-dd'),
+      year: ee.Date(im.get('system:time_start')).get('year'),
+      cloud_percentage: im.get('CLOUDY_PIXEL_PERCENTAGE'),
+      tile: im.get('MGRS_TILE'),
+      orbit: im.get('SENSING_ORBIT_NUMBER'),
+      processing_level: im.get('PROCESSING_LEVEL')
+    });
+  });
+  Export.table.toDrive({
+    collection: meta,
+    description: 'Seoul_S2_' + periodName + '_2022-2024_StackMetadata',
+    folder: EXPORT_FOLDER,
+    fileFormat: 'CSV'
+  });
+}
+
+// ---- 6) Run per period (median composite → 10m stack → export) ----
+PERIODS.forEach(function(p) {
+  var col = buildCollection(p.start, p.end);
+  ee.Number(col.size()).evaluate(function(n){
+    if (n > 0) {
+      var composite = col.median();
+      var stack10m  = to10m(composite);
+      exportBandStack(stack10m, p.name);
+      exportMetadata(col, p.name);
+      print(p.name + ': images=', n, ' — export queued (stack + metadata)');
+    } else {
+      print(p.name + ': no images for given filters.');
+    }
+  });
+});
