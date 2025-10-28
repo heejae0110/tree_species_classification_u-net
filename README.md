@@ -2,9 +2,9 @@
 
 # Algorithm_9sp_core — Minimal Reproducible Core
 
-This repository provides a **minimal, clean subset** of the author's research code for
+This repository provides a minimal, clean subset of the author's research code for
 tree species mapping with multi-season Sentinel-2 inputs and U-Net segmentation.
-It is designed to support **peer-review reproducibility** without exposing full data
+It is designed to support peer-review reproducibility without exposing full data
 pipelines, internal paths, or licensed datasets.
 
 ## What's included
@@ -15,5 +15,5 @@ pipelines, internal paths, or licensed datasets.
 - `model/dataset_class.py` — memory-mapped patch dataset and independent-test reader.
 - `feature/vegetation_indices_glcm.py` — 7 vegetation indices and GLCM calculater.
 
-> Note: Full preprocessing pipelines and raw imagery are **not** included due to size and licensing.
+> Note: Full preprocessing pipelines and raw imagery are not included due to size and licensing.
 > The provided modules are sufficient to understand and reproduce the methodology.
